@@ -1,0 +1,79 @@
+
+function axisTool = axiscalibration(pivotPoints)
+%%QUESTION2 - Axis Calibration
+% tipTool = tipcalibration(pivotPoses) Computes the Tool Axis in tool
+% Frame. The poses are initially moving along a circle (3 for each point).
+% A circle is fitted on each planar circle, and the average of the center
+% norms are used as the tracker axis. The same method as tool tip is used
+% to compute the axis in tool frame.
+%
+% INPUTS:
+%         pivotPoses - Marker positions supplied by the tracker in the form
+%                      of a 1x3 cell array (Apoints, Bpoints, Cpoints)
+% OUTPUTS:
+%         axisTool   - axis tool in tool frame
+
+
+%extract A B and C points from cell array
+Aposes = pivotPoints{1};
+Bposes = pivotPoints{2};
+Cposes = pivotPoints{3};
+
+
+%fit a plana
+%Fit for A
+[centerA, circleNormalA, radiusA] = CircFit3D(Aposes);
+%Fit for B;
+[centerB, circleNormalB, radiusB] = CircFit3D(Bposes);
+%Fit for B
+[centerC, circleNormalC, radiusC] = CircFit3D(Cposes);
+
+
+%adjust normal direction to match each other
+if (dot(circleNormalA, circleNormalB) < 0)
+    circleNormalB =  -circleNormalB;
+end
+
+if (dot(circleNormalA, circleNormalC) < 0)
+    circleNormalC =  -circleNormalC;
+end
+
+%compute avg of three norms to get axis vector in tracker frame
+axis_tracker = (circleNormalA + circleNormalB + circleNormalC) / 3;
+%axis_tracker = [axis_tracker ; 1];
+
+
+%compute each pose in home frame
+%get number of poses
+[numPoses,~] = size(Aposes);
+
+%transform each to tool frame
+%for each pose, compute its ortho frame and transform pH to tool frame
+vmCombined = [];
+
+for ix = 1:numPoses
+
+    %generate frame
+    [ToolFrameCenter, vbase1, vbase2, vbase3] = OrthoFrameT(Aposes(ix,:),Bposes(ix,:),Cposes(ix,:));
+
+    [F_hfromm] = FrameToHome(ToolFrameCenter,vbase1,vbase2,vbase3);
+
+    F_mfromh = inv(F_hfromm);
+
+    %extract rotational aspect of frame transofmraiton matrix
+    F_hfromm = F_hfromm(1:3,1:3);
+
+    %%apply transofmraiton matrix onto tip_tracker
+    vmI = F_hfromm * axis_tracker;
+
+    vmCombined(:,ix) = vmI;
+
+end
+
+
+%avg all poses to get toolAxis in marker frame
+axisTool = mean(vmCombined,2);
+
+end
+
+
